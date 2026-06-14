@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <title>Position Size + Fee Calculator</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+      padding: 16px;
+    }
+    .app { max-width: 520px; margin: auto; }
+    h1 { font-size: 22px; margin: 8px 0 4px; }
+    .sub { color: #94a3b8; font-size: 13px; margin-bottom: 16px; }
+    .card {
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 18px;
+      padding: 16px;
+      margin-bottom: 14px;
+      box-shadow: 0 12px 28px rgba(0,0,0,.25);
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      color: #cbd5e1;
+      margin: 12px 0 6px;
+    }
+    input, select {
+      width: 100%;
+      padding: 13px 14px;
+      border-radius: 12px;
+      border: 1px solid #334155;
+      background: #020617;
+      color: #f8fafc;
+      font-size: 16px;
+      outline: none;
+    }
+    input:focus, select:focus { border-color: #38bdf8; }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    button {
+      width: 100%;
+      padding: 15px;
+      border: 0;
+      border-radius: 14px;
+      background: #38bdf8;
+      color: #00111f;
+      font-weight: 700;
+      font-size: 16px;
+      margin-top: 14px;
+      cursor: pointer;
+    }
+    .secondary {
+      background: #1f2937;
+      color: #e5e7eb;
+      margin-top: 8px;
+    }
+    .result { display: grid; gap: 10px; }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      border-bottom: 1px solid #1f2937;
+      padding: 10px 0;
+      font-size: 14px;
+    }
+    .row:last-child { border-bottom: 0; }
+    .name { color: #94a3b8; }
+    .value { font-weight: 700; text-align: right; color: #f8fafc; }
+    .big { font-size: 22px; color: #38bdf8; }
+    .good { color: #22c55e; }
+    .bad { color: #ef4444; }
+    .warn { color: #facc15; }
+    .note {
+      font-size: 12px;
+      color: #94a3b8;
+      line-height: 1.5;
+    }
+    .saved {
+      font-size: 12px;
+      color: #22c55e;
+      margin-top: 8px;
+      min-height: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>Position Size + Fee</h1>
+    <div class="sub">จำค่าล่าสุดอัตโนมัติในมือถือ</div>
+
+    <div class="card">
+      <label>Direction</label>
+      <select id="direction">
+        <option value="long">LONG</option>
+        <option value="short">SHORT</option>
+      </select>
+
+      <label>Risk ต่อไม้ (USDT)</label>
+      <input id="risk" type="number" value="3" step="0.01">
+
+      <div class="grid">
+        <div>
+          <label>Entry</label>
+          <input id="entry" type="number" value="100" step="0.000001">
+        </div>
+        <div>
+          <label>Stop Loss</label>
+          <input id="sl" type="number" value="99" step="0.000001">
+        </div>
+      </div>
+
+      <label>Take Profit</label>
+      <input id="tp" type="number" value="102" step="0.000001">
+
+      <div class="grid">
+        <div>
+          <label>Fee เข้า %</label>
+          <input id="feeIn" type="number" value="0.05" step="0.001">
+        </div>
+        <div>
+          <label>Fee ออก %</label>
+          <input id="feeOut" type="number" value="0.05" step="0.001">
+        </div>
+      </div>
+
+      <button onclick="calc()">Calculate</button>
+      <button class="secondary" onclick="resetDefault()">Reset ค่าเริ่มต้น</button>
+      <div class="saved" id="savedText"></div>
+    </div>
+
+    <div class="card result" id="result">
+      <div class="note">ใส่ราคาแล้วกด Calculate</div>
+    </div>
+
+    <div class="note">
+      ระบบจะ Save ค่า Direction, Risk, Entry, SL, TP และ Fee ล่าสุดไว้ในเครื่องนี้โดยอัตโนมัติ
+    </div>
+  </div>
+
+<script>
+const STORAGE_KEY = "position_size_fee_latest_v2";
+
+const defaults = {
+  direction: "long",
+  risk: "3",
+  entry: "100",
+  sl: "99",
+  tp: "102",
+  feeIn: "0.05",
+  feeOut: "0.05"
+};
+
+function n(id) {
+  return parseFloat(document.getElementById(id).value) || 0;
+}
+
+function money(x) {
+  return x.toLocaleString(undefined, { maximumFractionDigits: 6 });
+}
+
+function setSavedText(text) {
+  document.getElementById("savedText").textContent = text;
+}
+
+function saveInputs() {
+  const data = {};
+  Object.keys(defaults).forEach(id => {
+    data[id] = document.getElementById(id).value;
+  });
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  setSavedText("Saved ค่าล่าสุดแล้ว");
+}
+
+function loadInputs() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  const data = raw ? JSON.parse(raw) : defaults;
+  Object.keys(defaults).forEach(id => {
+    document.getElementById(id).value = data[id] ?? defaults[id];
+  });
+}
+
+function resetDefault() {
+  localStorage.removeItem(STORAGE_KEY);
+  Object.keys(defaults).forEach(id => {
+    document.getElementById(id).value = defaults[id];
+  });
+  calc();
+  setSavedText("Reset แล้ว");
+}
+
+function calc() {
+  saveInputs();
+
+  const direction = document.getElementById("direction").value;
+  const risk = n("risk");
+  const entry = n("entry");
+  const sl = n("sl");
+  const tp = n("tp");
+  const feeIn = n("feeIn") / 100;
+  const feeOut = n("feeOut") / 100;
+
+  const res = document.getElementById("result");
+
+  if (risk <= 0 || entry <= 0 || sl <= 0 || tp <= 0) {
+    res.innerHTML = `<div class="bad">กรุณากรอกตัวเลขให้ครบ</div>`;
+    return;
+  }
+
+  let stopMove, tpMove;
+  if (direction === "long") {
+    stopMove = entry - sl;
+    tpMove = tp - entry;
+  } else {
+    stopMove = sl - entry;
+    tpMove = entry - tp;
+  }
+
+  if (stopMove <= 0 || tpMove <= 0) {
+    res.innerHTML = `<div class="bad">ราคา SL/TP ไม่ถูกกับ Direction</div>`;
+    return;
+  }
+
+  const riskPerCoin = stopMove + (entry * feeIn) + (sl * feeOut);
+  const qty = risk / riskPerCoin;
+  const positionSize = qty * entry;
+
+  const entryFee = positionSize * feeIn;
+  const slExitFee = qty * sl * feeOut;
+  const tpExitFee = qty * tp * feeOut;
+
+  const lossGross = qty * stopMove;
+  const lossNet = lossGross + entryFee + slExitFee;
+
+  const profitGross = qty * tpMove;
+  const profitNet = profitGross - entryFee - tpExitFee;
+  const rrNet = profitNet / lossNet;
+
+  res.innerHTML = `
+    <div class="row"><div class="name">Position Size</div><div class="value big">${money(positionSize)} USDT</div></div>
+    <div class="row"><div class="name">Quantity</div><div class="value">${money(qty)}</div></div>
+    <div class="row"><div class="name">Entry Fee</div><div class="value">${money(entryFee)} USDT</div></div>
+    <div class="row"><div class="name">Exit Fee ที่ SL</div><div class="value">${money(slExitFee)} USDT</div></div>
+    <div class="row"><div class="name">Exit Fee ที่ TP</div><div class="value">${money(tpExitFee)} USDT</div></div>
+    <div class="row"><div class="name">Loss รวม Fee</div><div class="value bad">-${money(lossNet)} USDT</div></div>
+    <div class="row"><div class="name">Profit หลังหัก Fee</div><div class="value good">+${money(profitNet)} USDT</div></div>
+    <div class="row"><div class="name">RR หลังหัก Fee</div><div class="value warn">1:${money(rrNet)}</div></div>
+  `;
+}
+
+document.querySelectorAll("input, select").forEach(el => {
+  el.addEventListener("input", calc);
+});
+
+loadInputs();
+calc();
+</script>
+</body>
+</html>
